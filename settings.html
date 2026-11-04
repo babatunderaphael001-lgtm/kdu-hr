@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KDU HR - Settings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI;background:#f4f6f5;margin:0}
+.header{background:#0a4d2e;color:white;padding:15px}
+.box{background:white;margin:15px;padding:20px;border-radius:10px}
+input,select{width:100%;padding:10px;margin:6px 0 12px 0;border:1px solid #ccc;border-radius:6px;box-sizing:border-box}
+button{padding:8px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:bold}
+.green{background:#0a4d2e;color:white}
+.blue{background:#0a7ad1;color:white}
+.red{background:#c00;color:white}
+.table-wrap{overflow-x:auto;margin-top:15px}
+table{width:100%;border-collapse:collapse;min-width:520px}
+th,td{border:1px solid #ddd;padding:8px;font-size:13px;text-align:left;white-space:nowrap}
+th{background:#0a4d2e;color:white}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999}
+.modal-box{background:white;width:92%;max-width:400px;margin:80px auto;padding:20px;border-radius:12px;text-align:center}
+.btn-row{display:flex;gap:10px;margin-top:15px}
+.btn-row button{flex:1;padding:12px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#msg{font-size:13px;margin-top:8px;min-height:18px;text-align:center}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="header">
+<h3 style="margin:0">Settings - HR Accounts</h3>
+<p style="margin:5px 0 0 0;font-size:13px"><a href="index.html" style="color:white">← Back to Dashboard</a></p>
+</div>
+
+<div class="box">
+<h3 id="formTitle" style="margin-top:0;color:#0a4d2e">Create HR Account</h3>
+<div class="form-grid">
+<div>
+<label>Email</label>
+<input id="newEmail" type="email" placeholder="Enter email">
+</div>
+<div>
+<label>Password</label>
+<input id="newPass" type="text" placeholder="Enter password">
+</div>
+</div>
+<label>Role</label>
+<select id="newRole">
+<option>Super Admin</option>
+<option>HR Manager</option>
+<option>HR Officer</option>
+<option>Viewer</option>
+</select>
+<button class="green" id="saveBtn" onclick="saveAccount()" style="width:100%;padding:12px;margin-top:10px">Create Account</button>
+<button id="cancelBtn" onclick="resetForm()" style="width:100%;background:#eee;margin-top:8px;display:none;padding:12px">Cancel Edit</button>
+<div id="msg"></div>
+
+<div class="table-wrap">
+<table id="accountsTable">
+<thead><tr><th>Email</th><th>Role</th><th>Password</th><th>Action</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+
+<!-- CONFIRM WITH CONFIRM AND CANCEL -->
+<div id="confirmModal" class="modal">
+<div class="modal-box">
+<h3 id="confirmTitle">Confirm</h3>
+<p id="confirmText"></p>
+<div class="btn-row">
+<button style="background:#eee" onclick="closeConfirm()">Cancel</button>
+<button class="green" id="confirmYesBtn">Confirm</button>
+</div>
+</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB2Ls3v20JIOyPZnWuJ9i4qSN6BWVxZ7q8",
+  authDomain: "kdu-hr.firebaseapp.com",
+  projectId: "kdu-hr",
+  storageBucket: "kdu-hr.firebasestorage.app",
+  messagingSenderId: "161278419566",
+  appId: "1:161278419566:web:d3469d9b7095b3db567c7f"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+let secondApp;
+try{ secondApp = initializeApp(firebaseConfig, "secondary"); }catch(e){ secondApp = app; }
+const auth2 = getAuth(secondApp);
+
+let editId = null;
+let allAccounts = [];
+function showMsg(text, color){
+  const m = document.getElementById('msg');
+  m.innerText = text; m.style.color = color || '#c00';
+}
+
+async function render(){
+  try{
+    const snap = await getDocs(query(collection(db,"hr_accounts"), orderBy("email")));
+    allAccounts = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(allAccounts.length===0){
+      await addDoc(collection(db,"hr_accounts"), {email:'hr@kdu.edu.ng', pass:'KDU2025', role:'Super Admin'});
+      return render();
+    }
+  }catch(e){ showMsg("Firestore error: "+e.message); return; }
+  const tbody = document.querySelector('#accountsTable tbody');
+  tbody.innerHTML='';
+  allAccounts.forEach(function(a){
+    var tr = document.createElement('tr');
+    var td1=document.createElement('td'); td1.textContent=a.email; tr.appendChild(td1);
+    var td2=document.createElement('td'); td2.textContent=a.role; tr.appendChild(td2);
+    var td3=document.createElement('td'); td3.textContent=a.pass||''; tr.appendChild(td3);
+    var td4=document.createElement('td');
+    var b1=document.createElement('button'); b1.className='blue'; b1.textContent='Edit'; b1.style.marginRight='5px'; b1.onclick=()=>editAcc(a.id);
+    var b2=document.createElement('button'); b2.className='red'; b2.textContent='Delete'; b2.onclick=()=>askDelete(a.id);
+    td4.appendChild(b1); td4.appendChild(b2); tr.appendChild(td4);
+    tbody.appendChild(tr);
+  });
+}
+render();
+
+window.openConfirm = function(title, text, onConfirm){
+  document.getElementById('confirmTitle').innerText = title;
+  document.getElementById('confirmText').innerText = text;
+  document.getElementById('confirmModal').style.display='block';
+  document.getElementById('confirmYesBtn').onclick = function(){
+    window.closeConfirm();
+    onConfirm();
+  };
+}
+window.closeConfirm = function(){ document.getElementById('confirmModal').style.display='none'; }
+
+window.saveAccount = async function(){
+  var email = document.getElementById('newEmail').value.trim();
+  var pass = document.getElementById('newPass').value.trim();
+  var role = document.getElementById('newRole').value;
+  if(!email || !pass){ showMsg("Enter email and password"); return; }
+  showMsg("", "#333");
+
+  if(editId){
+    window.openConfirm('Confirm Update', 'Update account to '+email+' ?', async function(){
+      await updateDoc(doc(db,"hr_accounts", editId), {email:email, pass:pass, role:role});
+      window.resetForm();
+      showMsg("Account updated", "green");
+      render();
+    });
+  } else {
+    if(allAccounts.find(function(x){ return x.email.toLowerCase()==email.toLowerCase() })){
+      window.openConfirm('Exists', 'This email already exists!', function(){});
+      return;
+    }
+    window.openConfirm('Confirm Create', 'Create account for '+email+' ?', async function(){
+      try{ await createUserWithEmailAndPassword(auth2, email, pass); }catch(e){ console.log(e.code); }
+      await addDoc(collection(db,"hr_accounts"), {email:email, pass:pass, role:role});
+      document.getElementById('newEmail').value='';
+      document.getElementById('newPass').value='';
+      showMsg("Account created for "+email, "green");
+      render();
+    });
+  }
+}
+
+window.editAcc = function(id){
+  var a = allAccounts.find(x=>x.id===id);
+  document.getElementById('newEmail').value = a.email;
+  document.getElementById('newPass').value = a.pass||'';
+  document.getElementById('newRole').value = a.role;
+  editId = id;
+  document.getElementById('formTitle').innerText = 'Edit HR Account';
+  document.getElementById('saveBtn').innerText = 'Update Account';
+  document.getElementById('cancelBtn').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+window.resetForm = function(){
+  editId = null;
+  document.getElementById('newEmail').value='';
+  document.getElementById('newPass').value='';
+  document.getElementById('newRole').value='Super Admin';
+  document.getElementById('formTitle').innerText = 'Create HR Account';
+  document.getElementById('saveBtn').innerText = 'Create Account';
+  document.getElementById('cancelBtn').style.display = 'none';
+}
+
+window.askDelete = function(id){
+  if(allAccounts.length==1){ showMsg("Cannot delete last account"); return; }
+  var a = allAccounts.find(x=>x.id===id);
+  window.openConfirm('Delete Account', 'Delete '+a.email+' ?', async function(){
+    await deleteDoc(doc(db,"hr_accounts", id));
+    if(editId===id) window.resetForm();
+    showMsg("Account deleted", "green");
+    render();
+  });
+}
+
+window.onclick = function(e){
+  if(e.target==document.getElementById('confirmModal')) window.closeConfirm();
+}
+</script>
+</body>
+</html>

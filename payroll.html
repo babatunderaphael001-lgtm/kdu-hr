@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KDU - Payroll</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI;background:#f4f6f5;margin:0}
+.header{background:#0a4d2e;color:white;padding:15px 20px;font-weight:bold}
+.header a{color:white;font-size:13px;text-decoration:none}
+.container{padding:20px;background:white;margin:20px;border-radius:10px}
+.kdu-btn{background:#0a4d2e;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:600;cursor:pointer}
+input,select{width:100%;padding:10px;margin:8px 0 15px 0;border:1px solid #ccc;border-radius:5px;box-sizing:border-box}
+label{font-size:13px;font-weight:600}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:600px;margin-top:20px}
+th{text-align:left;background:#f0f0f0;padding:12px}
+td{padding:12px;border-bottom:1px solid #eee;white-space:nowrap}
+#msg{font-size:13px;min-height:18px;text-align:center}
+.del{color:red;background:none;border:none;cursor:pointer;font-weight:bold}
+</style>
+</head>
+<body>
+<div class="header">KDU HR Management System &nbsp; <a href="index.html">← Dashboard</a></div>
+<div class="container">
+<h2>Payroll</h2>
+<label>Select Staff</label>
+<select id="staffSelect"><option>Loading staff...</option></select>
+<div id="manualBox" style="display:none;background:#fff8e1;padding:12px;border-radius:8px;margin-bottom:15px">
+<label>Type Staff Name (Not in list)</label>
+<input id="manualName" placeholder="e.g. Dr. Musa">
+<label>Type Department</label>
+<input id="manualDept" placeholder="e.g. Law">
+</div>
+<label>Department</label>
+<input id="payDept" readonly placeholder="Auto-filled">
+<label>Month</label>
+<input type="month" id="payMonth">
+<label>Basic Salary (₦)</label>
+<input type="number" id="salary" placeholder="e.g. 250000">
+<label>Allowance (₦)</label>
+<input type="number" id="allowance" value="0">
+<label>Deduction (₦)</label>
+<input type="number" id="deduction" value="0">
+<label>Net Pay (₦) - Auto</label>
+<input id="netPay" readonly style="background:#f0f0f0;font-weight:bold">
+<button class="kdu-btn" onclick="savePay()" style="width:100%">Save Payroll</button>
+<div id="msg"></div>
+<div class="table-wrap"><table><thead><tr><th>Name</th><th>Month</th><th>Salary</th><th>Allowance</th><th>Deduction</th><th>Net Pay</th><th>Action</th></tr></thead><tbody id="payBody"></tbody></table></div>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig = { apiKey: "AIzaSyB2Ls3v20JIOyPZnWuJ9i4qSN6BWVxZ7q8", authDomain: "kdu-hr.firebaseapp.com", projectId: "kdu-hr", storageBucket: "kdu-hr.firebasestorage.app", messagingSenderId: "161278419566", appId: "1:161278419566:web:d3469d9b7095b3db567c7f" };
+const app = initializeApp(firebaseConfig); const db = getFirestore(app);
+let allStaff=[];
+function showMsg(t,c){const m=document.getElementById('msg');m.innerText=t;m.style.color=c||'#c00';}
+function calc(){ const s=Number(document.getElementById('salary').value||0), a=Number(document.getElementById('allowance').value||0), d=Number(document.getElementById('deduction').value||0); document.getElementById('netPay').value = s+a-d; }
+['salary','allowance','deduction'].forEach(id=>document.getElementById(id).addEventListener('input',calc));
+document.getElementById('payMonth').value = new Date().toISOString().slice(0,7);
+async function loadStaff(){
+  const snap=await getDocs(query(collection(db,"staff"), orderBy("name")));
+  allStaff=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const sel=document.getElementById('staffSelect');
+  if(!allStaff.length){sel.innerHTML='<option value="">No staff yet - Go add staff first</option>';return;}
+  sel.innerHTML='<option value="">-- Select Staff --</option>'+allStaff.map(s=><option value="${s.id}">${s.name} - ${s.staffId||''} (${s.dept||''})</option>).join('')+'<option value="MANUAL">+ Staff not in list - Type name</option>';
+  sel.onchange=()=>{ if(sel.value==="MANUAL"){document.getElementById('manualBox').style.display='block';document.getElementById('payDept').value='';document.getElementById('salary').value='';calc();return;} document.getElementById('manualBox').style.display='none'; const s=allStaff.find(x=>x.id===sel.value); document.getElementById('payDept').value=s?s.dept||'':''; document.getElementById('salary').value=s?String(s.salary||'').replace(/[^0-9]/g,''):''; calc(); };
+}
+async function loadPay(){
+  const snap=await getDocs(query(collection(db,"payroll"), orderBy("month","desc")));
+  const list=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const body=document.getElementById('payBody');
+  if(!list.length){body.innerHTML='<tr><td colspan="7" style="text-align:center;color:#888">No payroll yet</td></tr>';return;}
+  body.innerHTML=list.map(p=><tr><td>${p.name||''}</td><td>${p.month||''}</td><td>₦${Number(p.salary||0).toLocaleString()}</td><td>₦${Number(p.allowance||0).toLocaleString()}</td><td>₦${Number(p.deduction||0).toLocaleString()}</td><td><b>₦${Number(p.net||p.netPay||0).toLocaleString()}</b></td><td><button class="del" onclick="delPay('${p.id}')">Delete</button></td></tr>).join('');
+}
+loadStaff(); loadPay();
+window.savePay=async function(){
+  const sel=document.getElementById('staffSelect');
+  let s=allStaff.find(x=>x.id===sel.value);
+  if(sel.value==="MANUAL"){ const n=document.getElementById('manualName').value.trim(); const d=document.getElementById('manualDept').value.trim(); if(!n){showMsg("Type staff name");return;} s={id:'manual',name:n,dept:d,staffId:''}; }
+  if(!s){showMsg("Please select staff first");return;}
+  const month=document.getElementById('payMonth').value, salary=Number(document.getElementById('salary').value||0), allowance=Number(document.getElementById('allowance').value||0), deduction=Number(document.getElementById('deduction').value||0), net=salary+allowance-deduction;
+  if(!month||!salary){showMsg("Pick month and salary");return;}
+  await addDoc(collection(db,"payroll"),{staffId:s.id,name:s.name,dept:s.dept||document.getElementById('payDept').value,month,salary,allowance,deduction,net,amount:net});
+  showMsg("Payroll saved for "+s.name+" - ₦"+net.toLocaleString(),"green"); loadPay();
+}
+window.delPay=async function(id){ await deleteDoc(doc(db,"payroll",id)); loadPay(); }
+</script>
+</body>
+</html>

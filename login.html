@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KDU HR - Login</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI;background:#f4f6f5;margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.login-box{background:white;width:92%;max-width:400px;padding:25px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+h2{text-align:center;color:#0a4d2e;margin-top:0}
+label{font-weight:600;font-size:14px}
+input{width:100%;padding:12px;margin:6px 0 14px 0;border:1px solid #ccc;border-radius:6px;box-sizing:border-box}
+button.green{background:#0a4d2e;color:white;border:none;padding:13px;width:100%;border-radius:6px;font-weight:bold;cursor:pointer;font-size:16px;margin-top:10px}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999}
+.modal-box{background:white;width:90%;max-width:380px;margin:100px auto;padding:20px;border-radius:12px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="login-box">
+<h2>KDU HR Management</h2>
+<p style="text-align:center;color:#666;font-size:14px">Login to continue</p>
+
+<form id="loginForm" onsubmit="doLogin(event)">
+<label>Email</label>
+<input id="email" type="email" required placeholder="Enter your email">
+
+<label>Password</label>
+<input id="pass" type="password" required placeholder="Enter your password">
+
+<button type="submit" class="green">Login</button>
+</form>
+</div>
+
+<div id="msgModal" class="modal">
+<div class="modal-box">
+<h3 id="msgTitle">Message</h3>
+<p id="msgText"></p>
+<button onclick="closeMsg()" style="background:#0a4d2e;color:white;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;margin-top:10px">OK</button>
+</div>
+</div>
+
+<script>
+var STORAGE_KEY = 'kdu_accounts';
+
+function getAccounts(){
+  var saved = localStorage.getItem(STORAGE_KEY);
+  var accounts = saved ? JSON.parse(saved) : [];
+  var hasDefault = accounts.some(function(a){ return a.email.toLowerCase() === 'hr@kdu.edu.ng'; });
+  if(!hasDefault){
+    accounts.push({email:'hr@kdu.edu.ng', pass:'KDU2025', role:'Super Admin'});
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+  }
+  return accounts;
+}
+
+function showMsg(title, text){
+  document.getElementById('msgTitle').innerText = title;
+  document.getElementById('msgText').innerText = text;
+  document.getElementById('msgModal').style.display='block';
+}
+function closeMsg(){ document.getElementById('msgModal').style.display='none'; }
+
+function doLogin(e){
+  e.preventDefault();
+  var email = document.getElementById('email').value.trim().toLowerCase();
+  var pass = document.getElementById('pass').value.trim();
+  var accounts = getAccounts();
+  var found = accounts.find(function(a){
+    return a.email.toLowerCase() === email && a.pass === pass;
+  });
+  if(found){
+    localStorage.setItem('kdu_logged_in', JSON.stringify(found));
+    showMsg('Success', 'Welcome ' + found.role + '! Redirecting...');
+    setTimeout(function(){ window.location.href = 'index.html'; }, 1000);
+  } else {
+    showMsg('Login Failed', 'Wrong email or password!');
+  }
+}
+
+window.onload = function(){ getAccounts(); }
+window.onclick = function(e){ if(e.target==document.getElementById('msgModal')) closeMsg(); }
+</script>
+</body>
+</html>

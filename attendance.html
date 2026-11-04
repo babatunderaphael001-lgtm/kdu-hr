@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KDU - Attendance</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI;background:#f4f6f5;margin:0}
+.header{background:#0a4d2e;color:white;padding:15px 20px;font-weight:bold}
+.header a{color:white;font-size:13px;text-decoration:none}
+.container{padding:20px;background:white;margin:20px;border-radius:10px}
+.kdu-btn{background:#0a4d2e;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:600;cursor:pointer}
+input,select{width:100%;padding:10px;margin:8px 0 15px 0;border:1px solid #ccc;border-radius:5px;box-sizing:border-box}
+label{font-size:13px;font-weight:600}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:520px;margin-top:20px}
+th{text-align:left;background:#f0f0f0;padding:12px}
+td{padding:12px;border-bottom:1px solid #eee;white-space:nowrap}
+#msg{font-size:13px;min-height:18px;text-align:center}
+.badge{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold}
+.present{background:#e6f4ea;color:#0a7a2e}
+.absent{background:#fde8e8;color:#c00}
+.late{background:#fff3cd;color:#856404}
+.del{color:red;background:none;border:none;cursor:pointer;font-weight:bold}
+</style>
+</head>
+<body>
+<div class="header">KDU HR Management System &nbsp; <a href="index.html">← Dashboard</a></div>
+<div class="container">
+<h2>Attendance</h2>
+
+<label>Select Staff</label>
+<select id="staffSelect"><option value="">Loading staff...</option></select>
+
+<div id="manualBox" style="display:none;background:#fff8e1;padding:12px;border-radius:8px;margin-bottom:15px">
+<label>Type Staff Name (Not in list)</label>
+<input id="manualName" placeholder="e.g. Dr. Musa">
+<label>Type Department</label>
+<input id="manualDept" placeholder="e.g. Law">
+</div>
+
+<label>Department</label>
+<input id="attDept" readonly placeholder="Auto-filled">
+
+<label>Date</label>
+<input type="date" id="attDate">
+
+<label>Status</label>
+<select id="attStatus">
+<option>Present</option>
+<option>Absent</option>
+<option>Late</option>
+</select>
+
+<button class="kdu-btn" onclick="saveAttendance()" style="width:100%">Mark Attendance</button>
+<div id="msg"></div>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Name</th><th>Department</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
+<tbody id="attBody"></tbody>
+</table>
+</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyB2Ls3v20JIOyPZnWuJ9i4qSN6BWVxZ7q8",
+  authDomain: "kdu-hr.firebaseapp.com",
+  projectId: "kdu-hr",
+  storageBucket: "kdu-hr.firebasestorage.app",
+  messagingSenderId: "161278419566",
+  appId: "1:161278419566:web:d3469d9b7095b3db567c7f"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let allStaff = [];
+function showMsg(t,c){ const m=document.getElementById('msg'); m.innerText=t; m.style.color=c||'#c00'; }
+document.getElementById('attDate').value = new Date().toISOString().slice(0,10);
+
+async function loadStaff(){
+  const snap = await getDocs(query(collection(db,"staff"), orderBy("name")));
+  allStaff = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  const sel = document.getElementById('staffSelect');
+  if(allStaff.length===0){ sel.innerHTML='<option value="">No staff yet - Go add staff first</option>'; return; }
+  sel.innerHTML = '<option value="">-- Select Staff --</option>' + allStaff.map(s=><option value="${s.id}">${s.name} - ${s.staffId||''} (${s.dept||''})</option>).join('') + '<option value="MANUAL">+ Staff not in list - Type name</option>';
+  sel.onchange = ()=>{
+    if(sel.value==="MANUAL"){
+      document.getElementById('manualBox').style.display='block';
+      document.getElementById('attDept').value='';
+      return;
+    }
+    document.getElementById('manualBox').style.display='none';
+    const s = allStaff.find(x=>x.id===sel.value);
+    document.getElementById('attDept').value = s ? s.dept||'' : '';
+  };
+}
+
+async function loadAtt(){
+  const snap = await getDocs(query(collection(db,"attendance"), orderBy("date","desc")));
+  const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  const body = document.getElementById('attBody');
+  if(!list.length){ body.innerHTML='<tr><td colspan="5" style="text-align:center;color:#888">No attendance yet</td></tr>'; return; }
+  body.innerHTML = list.map(a=>{
+    const cls = a.status==='Present'?'present':a.status==='Absent'?'absent':'late';
+    return <tr><td>${a.name||''}</td><td>${a.dept||''}</td><td>${a.date||''}</td><td><span class="badge ${cls}">${a.status}</span></td><td><button class="del" onclick="delAtt('${a.id}')">Delete</button></td></tr>;
+  }).join('');
+}
+loadStaff(); loadAtt();
+
+window.saveAttendance = async function(){
+  const sel = document.getElementById('staffSelect');
+  let s = allStaff.find(x=>x.id===sel.value);
+  if(sel.value==="MANUAL"){
+    const mName = document.getElementById('manualName').value.trim();
+    const mDept = document.getElementById('manualDept').value.trim() || document.getElementById('attDept').value.trim();
+    if(!mName){ showMsg("Type staff name"); return; }
+    s = {id:'manual', name:mName, dept:mDept, staffId:''};
+  }
+  if(!s){ showMsg("Please select staff first"); return; }
+  const date = document.getElementById('attDate').value;
+  const status = document.getElementById('attStatus').value;
+  if(!date){ showMsg("Pick date"); return; }
+  await addDoc(collection(db,"attendance"), {staffId:s.id, name:s.name, dept:s.dept, staffNo:s.staffId||'', date, status});
+  showMsg("Attendance marked for "+s.name, "green");
+  loadAtt();
+}
+window.delAtt = async function(id){
+  await deleteDoc(doc(db,"attendance", id));
+  loadAtt();
+}
+</script>
+</body>
+</html>

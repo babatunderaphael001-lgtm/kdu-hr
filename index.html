@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KDU HR - Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI;background:#f4f6f5;margin:0}
+.header{background:#0a4d2e;color:white;padding:18px 20px;display:flex;justify-content:space-between;align-items:center}
+.header a{color:white;text-decoration:none;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;padding:20px}
+.card{background:white;padding:20px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.card h2{margin:5px 0;font-size:32px;color:#0a4d2e}
+.card p{margin:0;color:#666;font-size:13px}
+.nav{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;padding:0 20px 20px}
+.nav a{background:white;padding:20px;border-radius:10px;text-decoration:none;color:#0a4d2e;font-weight:bold;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.nav a span{display:block;font-weight:normal;color:#666;font-size:12px;margin-top:5px}
+.list{background:white;margin:0 20px 20px;padding:20px;border-radius:10px}
+.list h3{margin-top:0;color:#0a4d2e}
+.list-item{padding:10px 0;border-bottom:1px solid #eee;font-size:14px;display:flex;justify-content:space-between}
+@media(max-width:700px){.grid{grid-template-columns:1fr 1fr}.nav{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="header">
+<div><b>KDU HR Management System</b><div style="font-size:12px;opacity:0.8">HR Dashboard</div></div>
+<a href="settings.html">Settings ⚙️</a>
+</div>
+
+<div class="grid">
+<div class="card"><p>Total Staff</p><h2 id="totalStaff">...</h2><p>All departments</p></div>
+<div class="card"><p>Present Today</p><h2 id="presentToday">...</h2><p id="todayDate"></p></div>
+<div class="card"><p>On Leave</p><h2 id="onLeave">...</h2><p>Approved leave</p></div>
+<div class="card"><p>Total Payroll</p><h2 id="totalPayroll">...</h2><p>This month</p></div>
+</div>
+
+<div class="nav">
+<a href="staff.html">👥 Staff Records<span>Manage all staff</span></a>
+<a href="attendance.html">🕒 Attendance<span>Mark attendance</span></a>
+<a href="leave.html">📅 Leave<span>Leave requests</span></a>
+<a href="payroll.html">💰 Payroll<span>Salary & payroll</span></a>
+<a href="settings.html">⚙️ Settings<span>HR Accounts</span></a>
+<a href="login.html">🚪 Logout<span>Back to login</span></a>
+</div>
+
+<div class="list">
+<h3>Recent Staff</h3>
+<div id="recentStaff">Loading...</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyB2Ls3v20JIOyPZnWuJ9i4qSN6BWVxZ7q8",
+  authDomain: "kdu-hr.firebaseapp.com",
+  projectId: "kdu-hr",
+  storageBucket: "kdu-hr.firebasestorage.app",
+  messagingSenderId: "161278419566",
+  appId: "1:161278419566:web:d3469d9b7095b3db567c7f"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const today = new Date().toISOString().slice(0,10);
+document.getElementById('todayDate').innerText = today;
+
+async function load(){
+  const staffSnap = await getDocs(collection(db,"staff"));
+  const staff = staffSnap.docs.map(d=>({id:d.id, ...d.data()}));
+  document.getElementById('totalStaff').innerText = staff.length;
+
+  let present = 0;
+  try{
+    const attSnap = await getDocs(collection(db,"attendance"));
+    attSnap.forEach(d=>{
+      const a = d.data();
+      if(a.date===today && (a.status==="Present" || a.status==="present")) present++;
+    });
+  }catch(e){}
+  document.getElementById('presentToday').innerText = present;
+
+  let leave = 0;
+  try{
+    const leaveSnap = await getDocs(collection(db,"leave"));
+    leaveSnap.forEach(d=>{
+      const l = d.data();
+      if(l.status==="Approved" || l.status==="approved") leave++;
+    });
+  }catch(e){}
+  document.getElementById('onLeave').innerText = leave;
+
+  let totalPay = 0;
+  try{
+    const paySnap = await getDocs(collection(db,"payroll"));
+    paySnap.forEach(d=>{
+      const p = d.data();
+      totalPay += Number(String(p.salary||p.amount||p.net||"0").replace(/[^0-9]/g,"")) || 0;
+    });
+    if(totalPay===0) staff.forEach(s=>{ totalPay += Number(String(s.salary||"0").replace(/[^0-9]/g,"")) || 0; });
+  }catch(e){}
+  document.getElementById('totalPayroll').innerText = "₦" + totalPay.toLocaleString();
+
+  const recent = staff.slice(-5).reverse();
+  document.getElementById('recentStaff').innerHTML = recent.length ? recent.map(s=><div class="list-item"><span><b>${s.name||''}</b> - ${s.dept||''}</span><span>${s.staffId||''}</span></div>).join('') : 'No staff yet. Add staff first.';
+}
+load();
+</script>
+</body>
+</html>
